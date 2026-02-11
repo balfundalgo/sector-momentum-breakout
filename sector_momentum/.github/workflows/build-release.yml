@@ -1,0 +1,179 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        default: 'dev'
+
+env:
+  APP_NAME: SectorMomentumStrategy
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install smartapi-python pyotp pandas requests websocket-client pyinstaller
+    
+    - name: Build EXE
+      run: |
+        pyinstaller --onefile --console --name ${{ env.APP_NAME }} `
+          --hidden-import=smartapi `
+          --hidden-import=SmartApi `
+          --hidden-import=SmartApi.smartConnect `
+          --hidden-import=SmartApi.smartWebSocketV2 `
+          --hidden-import=pyotp `
+          --hidden-import=websocket `
+          --hidden-import=websocket._abnf `
+          --hidden-import=websocket._app `
+          --hidden-import=websocket._core `
+          --hidden-import=websocket._exceptions `
+          --hidden-import=websocket._handshake `
+          --hidden-import=websocket._http `
+          --hidden-import=websocket._logging `
+          --hidden-import=websocket._socket `
+          --hidden-import=websocket._ssl_compat `
+          --hidden-import=websocket._url `
+          --hidden-import=websocket._utils `
+          --add-data "config.py;." `
+          main.py
+    
+    - name: Create Windows package
+      run: |
+        mkdir release
+        copy dist\${{ env.APP_NAME }}.exe release\
+        copy config.py release\
+        copy README.md release\ 2>nul || echo "No README.md found"
+        Compress-Archive -Path release\* -DestinationPath ${{ env.APP_NAME }}-Windows.zip
+    
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Windows
+        path: ${{ env.APP_NAME }}-Windows.zip
+        retention-days: 30
+
+  build-mac:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install smartapi-python pyotp pandas requests websocket-client pyinstaller
+    
+    - name: Build Mac executable
+      run: |
+        pyinstaller --onefile --console --name ${{ env.APP_NAME }} \
+          --hidden-import=smartapi \
+          --hidden-import=SmartApi \
+          --hidden-import=SmartApi.smartConnect \
+          --hidden-import=SmartApi.smartWebSocketV2 \
+          --hidden-import=pyotp \
+          --hidden-import=websocket \
+          --hidden-import=websocket._abnf \
+          --hidden-import=websocket._app \
+          --hidden-import=websocket._core \
+          --hidden-import=websocket._exceptions \
+          --hidden-import=websocket._handshake \
+          --hidden-import=websocket._http \
+          --hidden-import=websocket._logging \
+          --hidden-import=websocket._socket \
+          --hidden-import=websocket._ssl_compat \
+          --hidden-import=websocket._url \
+          --hidden-import=websocket._utils \
+          --add-data "config.py:." \
+          main.py
+    
+    - name: Create Mac package
+      run: |
+        mkdir release
+        cp dist/${{ env.APP_NAME }} release/
+        cp config.py release/
+        cp README.md release/ 2>/dev/null || echo "No README.md found"
+        chmod +x release/${{ env.APP_NAME }}
+        zip -r ${{ env.APP_NAME }}-Mac.zip release/
+    
+    - name: Upload Mac artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Mac
+        path: ${{ env.APP_NAME }}-Mac.zip
+        retention-days: 30
+
+  create-release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Windows
+        path: ./artifacts/windows
+    
+    - name: Download Mac artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Mac
+        path: ./artifacts/mac
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/windows/${{ env.APP_NAME }}-Windows.zip
+          artifacts/mac/${{ env.APP_NAME }}-Mac.zip
+        body: |
+          ## Sector Momentum Breakout Strategy ${{ github.ref_name }}
+          
+          ### Downloads
+          - **Windows**: `${{ env.APP_NAME }}-Windows.zip`
+          - **Mac**: `${{ env.APP_NAME }}-Mac.zip`
+          
+          ### Installation
+          1. Extract the ZIP file
+          2. Edit `config.py` with your Angel One credentials
+          3. Run the executable
+          
+          ### Usage
+          ```
+          # Paper trading (default)
+          ./SectorMomentumStrategy
+          
+          # Live trading
+          ./SectorMomentumStrategy --live
+          
+          # Force trend
+          ./SectorMomentumStrategy --trend BULLISH
+          ```
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
