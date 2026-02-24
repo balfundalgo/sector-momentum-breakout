@@ -1,0 +1,265 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        default: 'dev'
+
+env:
+  APP_NAME: SectorMomentumStrategy
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install smartapi-python pyotp pandas numpy requests websocket-client logzero pyinstaller
+
+    - name: Build EXE
+      run: |
+        pyinstaller --onefile --windowed --name ${{ env.APP_NAME }} `
+          --collect-all SmartApi `
+          --collect-all pandas `
+          --collect-all numpy `
+          --collect-all requests `
+          --collect-all pyotp `
+          --collect-all websocket `
+          --collect-all logzero `
+          --hidden-import=tkinter `
+          --hidden-import=tkinter.ttk `
+          --hidden-import=tkinter.scrolledtext `
+          --hidden-import=tkinter.messagebox `
+          --hidden-import=smartapi `
+          --hidden-import=SmartApi `
+          --hidden-import=SmartApi.smartConnect `
+          --hidden-import=SmartApi.smartWebSocketV2 `
+          --hidden-import=pyotp `
+          --hidden-import=websocket `
+          --hidden-import=websocket._abnf `
+          --hidden-import=websocket._app `
+          --hidden-import=websocket._core `
+          --hidden-import=websocket._exceptions `
+          --hidden-import=websocket._handshake `
+          --hidden-import=websocket._http `
+          --hidden-import=websocket._logging `
+          --hidden-import=websocket._socket `
+          --hidden-import=websocket._ssl_compat `
+          --hidden-import=websocket._url `
+          --hidden-import=websocket._utils `
+          --hidden-import=pandas._libs.tslibs.timedeltas `
+          --hidden-import=pandas._libs.tslibs.np_datetime `
+          --hidden-import=pandas._libs.tslibs.nattype `
+          --hidden-import=pandas._libs.skiplist `
+          --hidden-import=numpy.core._methods `
+          --hidden-import=numpy.lib.format `
+          --hidden-import=pkg_resources.py2_warn `
+          --hidden-import=angel_api `
+          --hidden-import=api_rate_limiter `
+          --hidden-import=candle_builder `
+          --hidden-import=data_fetcher `
+          --hidden-import=entry_monitor `
+          --hidden-import=logger `
+          --hidden-import=order_executor `
+          --hidden-import=position_monitor `
+          --hidden-import=sector_scanner `
+          --hidden-import=stock_selector `
+          --hidden-import=trend_identifier `
+          --hidden-import=websocket_manager `
+          --hidden-import=settings_manager `
+          --add-data "angel_api.py;." `
+          --add-data "api_rate_limiter.py;." `
+          --add-data "candle_builder.py;." `
+          --add-data "data_fetcher.py;." `
+          --add-data "entry_monitor.py;." `
+          --add-data "logger.py;." `
+          --add-data "order_executor.py;." `
+          --add-data "position_monitor.py;." `
+          --add-data "sector_scanner.py;." `
+          --add-data "stock_selector.py;." `
+          --add-data "trend_identifier.py;." `
+          --add-data "websocket_manager.py;." `
+          --add-data "settings_manager.py;." `
+          --paths "." `
+          gui.py
+
+    - name: Create Windows release package
+      run: |
+        mkdir release
+        copy dist\${{ env.APP_NAME }}.exe release\
+        copy config.py release\
+        copy README.md release\ 2>nul || echo "No README.md"
+        copy QUICK_REFERENCE.md release\ 2>nul || echo "No QUICK_REFERENCE.md"
+        echo *** EDIT config.py with your Angel One credentials before running *** > release\IMPORTANT_READ_FIRST.txt
+        Compress-Archive -Path release\* -DestinationPath ${{ env.APP_NAME }}-Windows.zip
+
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Windows
+        path: ${{ env.APP_NAME }}-Windows.zip
+        retention-days: 30
+
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install smartapi-python pyotp pandas numpy requests websocket-client logzero pyinstaller
+
+    - name: Build Mac executable
+      run: |
+        pyinstaller --onefile --windowed --name ${{ env.APP_NAME }} \
+          --collect-all SmartApi \
+          --collect-all pandas \
+          --collect-all numpy \
+          --collect-all requests \
+          --collect-all pyotp \
+          --collect-all websocket \
+          --collect-all logzero \
+          --hidden-import=tkinter \
+          --hidden-import=tkinter.ttk \
+          --hidden-import=tkinter.scrolledtext \
+          --hidden-import=tkinter.messagebox \
+          --hidden-import=smartapi \
+          --hidden-import=SmartApi \
+          --hidden-import=SmartApi.smartConnect \
+          --hidden-import=SmartApi.smartWebSocketV2 \
+          --hidden-import=pyotp \
+          --hidden-import=websocket \
+          --hidden-import=websocket._abnf \
+          --hidden-import=websocket._app \
+          --hidden-import=websocket._core \
+          --hidden-import=websocket._exceptions \
+          --hidden-import=websocket._handshake \
+          --hidden-import=websocket._http \
+          --hidden-import=websocket._logging \
+          --hidden-import=websocket._socket \
+          --hidden-import=websocket._ssl_compat \
+          --hidden-import=websocket._url \
+          --hidden-import=websocket._utils \
+          --hidden-import=pandas._libs.tslibs.timedeltas \
+          --hidden-import=pandas._libs.tslibs.np_datetime \
+          --hidden-import=pandas._libs.tslibs.nattype \
+          --hidden-import=pandas._libs.skiplist \
+          --hidden-import=numpy.core._methods \
+          --hidden-import=numpy.lib.format \
+          --hidden-import=pkg_resources.py2_warn \
+          --hidden-import=angel_api \
+          --hidden-import=api_rate_limiter \
+          --hidden-import=candle_builder \
+          --hidden-import=data_fetcher \
+          --hidden-import=entry_monitor \
+          --hidden-import=logger \
+          --hidden-import=order_executor \
+          --hidden-import=position_monitor \
+          --hidden-import=sector_scanner \
+          --hidden-import=stock_selector \
+          --hidden-import=trend_identifier \
+          --hidden-import=websocket_manager \
+          --hidden-import=settings_manager \
+          --add-data "angel_api.py:." \
+          --add-data "api_rate_limiter.py:." \
+          --add-data "candle_builder.py:." \
+          --add-data "data_fetcher.py:." \
+          --add-data "entry_monitor.py:." \
+          --add-data "logger.py:." \
+          --add-data "order_executor.py:." \
+          --add-data "position_monitor.py:." \
+          --add-data "sector_scanner.py:." \
+          --add-data "stock_selector.py:." \
+          --add-data "trend_identifier.py:." \
+          --add-data "websocket_manager.py:." \
+          --add-data "settings_manager.py:." \
+          --paths "." \
+          gui.py
+
+    - name: Create Mac release package
+      run: |
+        mkdir release
+        cp dist/${{ env.APP_NAME }} release/
+        cp config.py release/
+        cp README.md release/ 2>/dev/null || echo "No README.md"
+        cp QUICK_REFERENCE.md release/ 2>/dev/null || echo "No QUICK_REFERENCE.md"
+        echo "*** EDIT config.py with your Angel One credentials before running ***" > release/IMPORTANT_READ_FIRST.txt
+        chmod +x release/${{ env.APP_NAME }}
+        zip -r ${{ env.APP_NAME }}-Mac.zip release/
+
+    - name: Upload Mac artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Mac
+        path: ${{ env.APP_NAME }}-Mac.zip
+        retention-days: 30
+
+  create-release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Windows
+        path: ./artifacts/windows
+
+    - name: Download Mac artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Mac
+        path: ./artifacts/mac
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/windows/${{ env.APP_NAME }}-Windows.zip
+          artifacts/mac/${{ env.APP_NAME }}-Mac.zip
+        body: |
+          ## Sector Momentum Breakout Strategy ${{ github.ref_name }}
+
+          ### Downloads
+          - **Windows**: `${{ env.APP_NAME }}-Windows.zip`
+          - **Mac**: `${{ env.APP_NAME }}-Mac.zip`
+
+          ### Setup
+          1. Extract the ZIP
+          2. Run the EXE — Settings window opens automatically if credentials are missing
+          3. Enter your Angel One credentials in the Settings panel
+          4. Choose Paper or Live mode and click **START**
+
+          > ⚠️ Keep `config.py` in the same folder as the EXE
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
